@@ -1,0 +1,7 @@
+---
+description: While checking Supabase configs and building CMS
+globs: 
+---
+You are building a very simple CMS for my supabase with CRUD operations enabled. You have references in /definitions folder where I have added table definitions which will also tell you about relationships between each table and how you can enable the operations in the CMS dashboard. Pls check and act accoridingly.
+
+You have action plan in [further_plan.md](mdc:further_plan.md)
