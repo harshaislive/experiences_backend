@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { EyeIcon, ShareIcon, ClipboardIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { EyeIcon, ShareIcon, ClipboardIcon, ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { ExclamationCircleIcon, MagnifyingGlassIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 
@@ -25,6 +25,7 @@ export function RegistrationsTable({
   const [confirmationUrl, setConfirmationUrl] = useState('');
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [isSearching, setIsSearching] = useState(false);
+  const [isUpdatingPayment, setIsUpdatingPayment] = useState<string | null>(null);
 
   useEffect(() => {
     loadRegistrations(initialSearchQuery);
@@ -202,6 +203,34 @@ export function RegistrationsTable({
     } catch (err) {
       console.error('Error downloading registrations:', err);
       toast.error('Failed to download registrations');
+    }
+  };
+
+  const handleMarkAsCompleted = async (registrationId: string) => {
+    try {
+      setIsUpdatingPayment(registrationId);
+      await RegistrationsService.updateRegistration(registrationId, {
+        payment_status: 'completed',
+        payment_date: new Date().toISOString()
+      });
+      
+      // Update the local state to reflect the change
+      setRegistrations(registrations.map(reg => 
+        reg.id === registrationId 
+          ? { 
+              ...reg, 
+              payment_status: 'completed', 
+              payment_date: new Date().toISOString() 
+            } 
+          : reg
+      ));
+      
+      toast.success('Payment status updated to completed');
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      toast.error('Failed to update payment status');
+    } finally {
+      setIsUpdatingPayment(null);
     }
   };
 
@@ -444,6 +473,20 @@ export function RegistrationsTable({
                   }`}>
                     {reg.payment_status}
                   </span>
+                  {reg.payment_status === 'pending' && (
+                    <button
+                      onClick={() => handleMarkAsCompleted(reg.id)}
+                      disabled={isUpdatingPayment === reg.id}
+                      className="ml-2 text-[#344736] hover:text-[#415c43] inline-flex items-center"
+                      title="Mark as Completed"
+                    >
+                      {isUpdatingPayment === reg.id ? (
+                        <div className="animate-spin h-4 w-4 border-t-2 border-b-2 border-[#344736] rounded-full"></div>
+                      ) : (
+                        <CheckCircleIcon className="h-4 w-4" />
+                      )}
+                    </button>
+                  )}
                 </div>
               </td>
               <td className="px-6 py-4 text-sm text-[#51514d]">
