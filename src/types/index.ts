@@ -41,7 +41,7 @@ export interface Experience {
   experience_images?: ExperienceImage[];
 }
 
-export type PricingCategory = 'adult' | 'child' | 'camping_gear' | 'Member Adult' | 'Member Kid' | 'Non-Member Adult' | 'Non-Member Kid';
+export type PricingCategory = 'adult_member' | 'adult_non_member' | 'child_member' | 'child_non_member' | 'camping_gear';
 
 export interface ExperiencePricing {
   id: string;

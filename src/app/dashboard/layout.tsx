@@ -9,6 +9,8 @@ import {
   CalendarIcon,
   ArrowLeftOnRectangleIcon,
   QuestionMarkCircleIcon,
+  UserGroupIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '@/contexts/AuthContext';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
@@ -20,7 +22,9 @@ import toast from 'react-hot-toast';
 const navigation = [
   { name: 'Locations', href: '/dashboard/locations', icon: MapPinIcon },
   { name: 'Experiences', href: '/dashboard/experiences', icon: CalendarIcon },
+  { name: 'Registrations', href: '/dashboard/registrations', icon: UserGroupIcon },
   { name: 'Help', href: '/dashboard/help', icon: QuestionMarkCircleIcon },
+  { name: 'Diagnostics', href: '/dashboard/diagnostics', icon: WrenchScrewdriverIcon },
 ];
 
 interface DashboardLayoutProps {

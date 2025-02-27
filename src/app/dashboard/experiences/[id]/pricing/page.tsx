@@ -21,7 +21,7 @@ interface PricingFormData {
 }
 
 const initialFormData: PricingFormData = {
-  category: 'adult',
+  category: 'adult_member',
   price: '',
   description: '',
   max_quantity: '',
@@ -212,13 +212,11 @@ export default function ExperiencePricingPage() {
   ];
 
   const pricingCategories: { value: PricingCategory; label: string }[] = [
-    { value: 'adult', label: 'Adult' },
-    { value: 'child', label: 'Child' },
+    { value: 'adult_member', label: 'Adult Member' },
+    { value: 'adult_non_member', label: 'Adult Non-Member' },
+    { value: 'child_member', label: 'Child Member' },
+    { value: 'child_non_member', label: 'Child Non-Member' },
     { value: 'camping_gear', label: 'Camping Gear' },
-    { value: 'Member Adult', label: 'Member Adult' },
-    { value: 'Member Kid', label: 'Member Kid' },
-    { value: 'Non-Member Adult', label: 'Non-Member Adult' },
-    { value: 'Non-Member Kid', label: 'Non-Member Kid' },
   ];
 
   return (
