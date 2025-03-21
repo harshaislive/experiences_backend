@@ -47,15 +47,30 @@ export default function ExperiencesPage() {
   const [selectedExperience, setSelectedExperience] = useState<Experience | null>(null);
   const [experienceToDelete, setExperienceToDelete] = useState<Experience | null>(null);
   const [formData, setFormData] = useState<ExperienceFormData>(initialFormData);
+  const [debugInfo, setDebugInfo] = useState({ count: 0, statuses: {} });
 
   const loadExperiences = useCallback(async () => {
     try {
       setIsLoading(true);
+      console.log('Loading experiences...');
       const [experiencesData, locationsData] = await Promise.all([
         ExperiencesService.getAll(),
         LocationsService.getAll(),
       ]);
+      console.log('Experiences fetched:', experiencesData);
+      
       setExperiences(experiencesData || []);
+      
+      const statuses = {};
+      experiencesData?.forEach(exp => {
+        statuses[exp.status] = (statuses[exp.status] || 0) + 1;
+      });
+      
+      setDebugInfo({
+        count: experiencesData?.length || 0,
+        statuses
+      });
+      
       setLocations(
         locationsData?.map((loc) => ({ id: loc.id, name: loc.name })) || []
       );
@@ -135,7 +150,7 @@ export default function ExperiencesPage() {
         if (!result.success) {
           throw new Error(result.error);
         }
-
+        console.log('New experience created:', result.data);
         toast.success('Experience created successfully');
       }
 
@@ -143,7 +158,11 @@ export default function ExperiencesPage() {
       setFormData(initialFormData);
       setSelectedExperience(null);
       setModalOpen(false);
-      loadExperiences();
+      
+      // Force reload experiences to see the new one
+      setTimeout(() => {
+        loadExperiences();
+      }, 500); // Small delay to ensure the database has time to update
     } catch (error) {
       console.error('Error saving experience:', error);
       toast.error('Failed to save experience');
@@ -272,6 +291,14 @@ export default function ExperiencesPage() {
     },
   ];
 
+  const handleRefresh = () => {
+    toast.loading('Refreshing experiences...');
+    loadExperiences().then(() => {
+      toast.dismiss();
+      toast.success('Experiences refreshed');
+    });
+  };
+
   return (
     <div className="min-h-screen bg-[#fdfbf7]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -288,14 +315,33 @@ export default function ExperiencesPage() {
         {/* Main Content */}
         <div className="bg-[#fdfbf7]/70 backdrop-blur-xl rounded-2xl shadow-[0_2px_20px_rgba(52,46,41,0.04)] overflow-hidden border border-[#e7e4df]">
           <div className="p-8">
-            <div className="flex justify-end mb-8">
-              <Button 
-                onClick={handleCreate} 
-                className="bg-[#344736] hover:bg-[#415c43] text-white px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md"
-              >
-                <PlusIcon className="h-5 w-5 mr-2" />
-                New Experience
-              </Button>
+            <div className="flex justify-between mb-8">
+              <div>
+                {/* Only show this in development to help debugging */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="text-xs text-[#51514d]">
+                    Found {debugInfo.count} experiences. 
+                    Status counts: {Object.entries(debugInfo.statuses).map(([status, count]) => 
+                      `${status}: ${count}`).join(', ')}
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleRefresh}
+                  variant="secondary" 
+                  className="px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-200"
+                >
+                  Refresh
+                </Button>
+                <Button 
+                  onClick={handleCreate} 
+                  className="bg-[#344736] hover:bg-[#415c43] text-white px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md"
+                >
+                  <PlusIcon className="h-5 w-5 mr-2" />
+                  New Experience
+                </Button>
+              </div>
             </div>
 
             <DataTable

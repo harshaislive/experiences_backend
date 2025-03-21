@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { MapPinIcon, CalendarIcon, UserGroupIcon, CurrencyDollarIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { ExperiencesService } from '@/services/experiences';
 import { LocationsService } from '@/services/locations';
 import { RegistrationsService, Registration } from '@/services/RegistrationsService';
@@ -18,16 +19,36 @@ export default function DashboardPage() {
     completedRegistrations: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    // Check if device is mobile
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    // Initial check
+    checkMobile();
+    
+    // Add resize listener
+    window.addEventListener('resize', checkMobile);
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
         setIsLoading(true);
-        const [locations, experiences, registrations] = await Promise.all([
+        const [locations, experiences, registrationsResult] = await Promise.all([
           LocationsService.getAll(),
           ExperiencesService.getAll(),
-          RegistrationsService.getRegistrations(),
+          RegistrationsService.getRegistrations(undefined, 1, 100), // Get the first 100 registrations for dashboard stats
         ]);
+
+        // Extract registrations from the paginated result
+        const registrations = registrationsResult.data || [];
 
         // Calculate metrics
         const totalLocations = locations?.length || 0;
@@ -79,6 +100,21 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#fdfbf7]">
+      {/* Mobile Warning Banner */}
+      {isMobile && (
+        <div className="bg-amber-50 border-l-4 border-amber-500 p-4 sticky top-0 z-50">
+          <div className="flex items-start">
+            <ExclamationTriangleIcon className="h-6 w-6 text-amber-500 mr-3 flex-shrink-0" />
+            <div>
+              <h3 className="text-sm font-medium text-amber-800">Desktop Recommended</h3>
+              <div className="mt-1 text-sm text-amber-700">
+                <p>For the best experience, please access the dashboard from a desktop device.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Welcome Section */}
         <div className="text-center mb-16">

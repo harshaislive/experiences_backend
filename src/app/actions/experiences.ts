@@ -24,6 +24,7 @@ export async function updateExperience(id: string, data: Partial<Experience>) {
 
 export async function createExperience(data: Omit<Experience, 'id' | 'created_at' | 'updated_at'>) {
   try {
+    console.log('Creating experience with data:', data);
     const supabase = getServiceClient()
     const { data: newExperience, error } = await supabase
       .from('experiences')
@@ -31,7 +32,12 @@ export async function createExperience(data: Omit<Experience, 'id' | 'created_at
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Error in createExperience action:', error);
+      throw error;
+    }
+    
+    console.log('Successfully created experience:', newExperience);
     return { success: true, data: newExperience }
   } catch (error) {
     console.error('Server error creating experience:', error)

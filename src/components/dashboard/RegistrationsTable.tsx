@@ -1,10 +1,11 @@
-import { Registration, RegistrationsService } from '@/services/RegistrationsService';
+import { Registration, RegistrationsService, PaginatedResult } from '@/services/RegistrationsService';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { EyeIcon, ShareIcon, ClipboardIcon, ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { ExclamationCircleIcon, MagnifyingGlassIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 
 interface RegistrationsTableProps {
@@ -24,12 +25,19 @@ export function RegistrationsTable({
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [confirmationUrl, setConfirmationUrl] = useState('');
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+  const [searchType, setSearchType] = useState<'transaction' | 'user'>('transaction');
   const [isSearching, setIsSearching] = useState(false);
   const [isUpdatingPayment, setIsUpdatingPayment] = useState<string | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalRegistrations, setTotalRegistrations] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [pageSize, setPageSize] = useState(limit);
 
   useEffect(() => {
     loadRegistrations(initialSearchQuery);
-  }, []);
+  }, [currentPage, pageSize]); // Reload when page or page size changes
 
   useEffect(() => {
     if (initialSearchQuery !== searchQuery) {
@@ -43,17 +51,27 @@ export function RegistrationsTable({
       setIsLoading(true);
       setError(null);
       console.log('Fetching registrations...');
-      const data = await RegistrationsService.getRegistrations(query);
-      console.log(`Received ${data.length} registrations`);
       
-      if (data.length === 0 && query) {
+      const result = await RegistrationsService.getRegistrations(
+        query, 
+        currentPage, 
+        pageSize,
+        searchType
+      );
+      
+      console.log(`Received ${result.data.length} registrations, total: ${result.total}`);
+      
+      // Update state with paginated data
+      setRegistrations(result.data);
+      setTotalRegistrations(result.total);
+      setTotalPages(result.totalPages);
+      
+      if (result.data.length === 0 && query) {
         console.log('No registrations found for search query:', query);
         toast.info(`No registrations found matching "${query}"`);
-      } else if (data.length === 0) {
+      } else if (result.data.length === 0) {
         console.log('No registrations found or error occurred');
       }
-      
-      setRegistrations(data.slice(0, limit));
     } catch (err) {
       console.error('Error loading registrations:', err);
       setError('Failed to load registrations. Please try again.');
@@ -112,13 +130,27 @@ export function RegistrationsTable({
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSearching(true);
+    setCurrentPage(1); // Reset to first page when searching
     loadRegistrations(searchQuery);
   };
 
   const clearSearch = () => {
     setSearchQuery('');
     setIsSearching(true);
+    setCurrentPage(1); // Reset to first page when clearing search
     loadRegistrations();
+  };
+
+  // Pagination handlers
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setCurrentPage(newPage);
+  };
+
+  const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newSize = parseInt(e.target.value, 10);
+    setPageSize(newSize);
+    setCurrentPage(1); // Reset to first page when changing page size
   };
 
   const downloadRegistrationsCSV = () => {
@@ -248,272 +280,228 @@ export function RegistrationsTable({
       <div className="text-center py-8">
         <div className="text-red-500 mb-4">
           <ExclamationCircleIcon className="h-12 w-12 mx-auto" />
+          <p className="mt-2 text-lg font-semibold">Error Loading Data</p>
         </div>
-        <p className="text-lg font-medium text-[#342e29]">Error Loading Registrations</p>
-        <p className="text-[#51514d] mt-1">{error}</p>
-        <button
-          onClick={() => loadRegistrations()}
-          className="mt-4 px-4 py-2 bg-[#344736] text-white rounded-md hover:bg-[#415c43]"
-        >
-          Try Again
-        </button>
-      </div>
-    );
-  }
-
-  if (registrations.length === 0) {
-    return (
-      <div className="bg-[#fdfbf7] shadow rounded-lg overflow-hidden border border-[#e7e4df]">
-        <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-lg font-medium">
-            Registrations (0)
-            {searchQuery && <span className="ml-2 text-sm text-gray-500">Search results for: "{searchQuery}"</span>}
-          </h2>
-          <div className="flex space-x-2">
-            <button 
-              onClick={() => loadRegistrations(searchQuery)}
-              className="px-3 py-1 bg-[#e7e4df] rounded hover:bg-[#d1cec9] flex items-center text-[#342e29]"
-              disabled={isLoading || isSearching}
-            >
-              <ArrowPathIcon className={`h-4 w-4 mr-1 ${(isLoading || isSearching) ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-          </div>
-        </div>
-        
-        {/* Search Bar */}
-        <div className="p-4 border-b">
-          <form onSubmit={handleSearch} className="flex items-center">
-            <div className="relative flex-grow">
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by Transaction ID or Registration ID..."
-                className="w-full p-2 pl-10 border border-r-0 rounded-l-md focus:outline-none focus:ring-2 focus:ring-[#344736] focus:border-[#344736]"
-              />
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 absolute left-2 top-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <button
-              type="submit"
-              className="p-2 bg-[#344736] text-white rounded-r-md hover:bg-[#415c43] flex items-center"
-              disabled={isSearching}
-            >
-              {isSearching ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Searching...
-                </>
-              ) : (
-                'Search'
-              )}
-            </button>
-            {searchQuery && (
-              <button
-                onClick={clearSearch}
-                className="mt-4 px-4 py-2 bg-[#344736] text-white rounded-md hover:bg-[#415c43]"
-              >
-                Clear Search
-              </button>
-            )}
-          </form>
-        </div>
-        
-        <div className="py-12 text-center">
-          <div className="text-[#51514d] mb-4">
-            <MagnifyingGlassIcon className="h-12 w-12 mx-auto" />
-          </div>
-          {searchQuery ? (
-            <>
-              <p className="text-lg font-medium text-[#342e29]">No registrations found</p>
-              <p className="text-[#51514d] mt-1">No registrations match your search criteria</p>
-              <button
-                onClick={clearSearch}
-                className="mt-4 px-4 py-2 bg-[#344736] text-white rounded-md hover:bg-[#415c43]"
-              >
-                Clear Search
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="text-lg font-medium text-[#342e29]">No registrations yet</p>
-              <p className="text-[#51514d] mt-1">When users register for experiences, they'll appear here</p>
-            </>
-          )}
-        </div>
+        <p className="mb-6 text-[#51514d]">{error}</p>
+        <Button onClick={() => loadRegistrations()}>Try Again</Button>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#fdfbf7] shadow rounded-lg overflow-hidden border border-[#e7e4df]">
-      <div className="flex justify-between items-center p-4 border-b">
-        <h2 className="text-lg font-medium">
-          Registrations ({registrations.length})
-          {searchQuery && <span className="ml-2 text-sm text-gray-500">Search results for: "{searchQuery}"</span>}
-        </h2>
-        <div className="flex space-x-2">
-          <button 
-            onClick={() => loadRegistrations(searchQuery)}
-            className="px-3 py-1 bg-[#e7e4df] rounded hover:bg-[#d1cec9] flex items-center text-[#342e29]"
-            disabled={isLoading || isSearching}
-          >
-            <ArrowPathIcon className={`h-4 w-4 mr-1 ${(isLoading || isSearching) ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-          <button 
-            onClick={downloadRegistrationsCSV}
-            className="px-3 py-1 bg-[#344736] text-white rounded hover:bg-[#415c43] flex items-center"
-          >
-            <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
-            Download CSV
-          </button>
-        </div>
-      </div>
-      <div className="p-4 border-b">
-        <form onSubmit={handleSearch} className="flex items-center">
+    <div>
+      {/* Search and Filter Section */}
+      <div className="mb-6">
+        <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4 mb-4">
           <div className="relative flex-grow">
             <input
               type="search"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-[#344736] focus:border-[#344736]"
+              placeholder={searchType === 'transaction' ? "Search by transaction ID..." : "Search by name or email..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by Transaction ID or Registration ID..."
-              className="w-full p-2 pl-10 border border-r-0 rounded-l-md focus:outline-none focus:ring-2 focus:ring-[#344736] focus:border-[#344736]"
             />
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 absolute left-2 top-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+            </div>
           </div>
-          <button
-            type="submit"
-            className="p-2 bg-[#344736] text-white rounded-r-md hover:bg-[#415c43] flex items-center"
-            disabled={isSearching}
-          >
-            {isSearching ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Searching...
-              </>
-            ) : (
-              'Search'
-            )}
-          </button>
-          {searchQuery && (
-            <button
-              onClick={clearSearch}
-              className="p-2 bg-[#344736] text-white rounded hover:bg-[#415c43] ml-2"
-              type="button"
+          
+          <div className="flex gap-2">
+            <select
+              className="border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-[#344736] focus:border-[#344736]"
+              value={searchType}
+              onChange={(e) => setSearchType(e.target.value as 'transaction' | 'user')}
             >
-              Clear
-            </button>
-          )}
+              <option value="transaction">Transaction ID</option>
+              <option value="user">User Name/Email</option>
+            </select>
+            
+            <Button 
+              type="submit" 
+              className="bg-[#344736] text-white hover:bg-[#415c43]"
+              disabled={isSearching}
+            >
+              Search
+            </Button>
+            
+            {searchQuery && (
+              <Button 
+                type="button" 
+                variant="secondary" 
+                onClick={clearSearch}
+                disabled={isSearching}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
         </form>
       </div>
-      <table className="min-w-full divide-y divide-[#e7e4df]">
-        <thead className="bg-[#f5efe6]">
-          <tr>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-[#342e29] uppercase tracking-wider">
-              Registration
-            </th>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-[#342e29] uppercase tracking-wider">
-              User
-            </th>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-[#342e29] uppercase tracking-wider">
-              Experience
-            </th>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-[#342e29] uppercase tracking-wider">
-              Payment
-            </th>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-[#342e29] uppercase tracking-wider">
-              Date
-            </th>
-            <th scope="col" className="relative px-6 py-3">
-              <span className="sr-only">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-[#fdfbf7] divide-y divide-[#e7e4df]">
-          {registrations.map((reg) => (
-            <tr key={reg.id} className="hover:bg-[#f5efe6]">
-              <td className="px-6 py-4 text-sm text-[#342e29]">{reg.id}</td>
-              <td className="px-6 py-4">
-                <div className="text-sm text-[#342e29]">{reg.user?.full_name}</div>
-                <div className="text-sm text-[#51514d]">{reg.user?.email}</div>
-                <div className="text-sm text-[#51514d]">{reg.user?.phone}</div>
-              </td>
-              <td className="px-6 py-4 text-sm text-[#342e29]">{reg.experience?.title}</td>
-              <td className="px-6 py-4 text-sm text-[#342e29]">
-                {reg.transaction_id ? (
-                  <div className="flex items-center">
-                    <span className="mr-1">₹{reg.total_amount}</span>
-                    <button 
-                      onClick={() => copyToClipboard(reg.transaction_id || '')}
-                      className="text-[#344736] hover:text-[#415c43] ml-1"
-                      title="Copy Transaction ID"
-                    >
-                      <ClipboardIcon className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <span>₹{reg.total_amount}</span>
-                )}
-                <div className="text-sm text-[#51514d]">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                    reg.payment_status === 'completed' ? 'bg-green-100 text-green-800' : 
-                    reg.payment_status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {reg.payment_status}
-                  </span>
-                  {reg.payment_status === 'pending' && (
-                    <button
-                      onClick={() => handleMarkAsCompleted(reg.id)}
-                      disabled={isUpdatingPayment === reg.id}
-                      className="ml-2 text-[#344736] hover:text-[#415c43] inline-flex items-center"
-                      title="Mark as Completed"
-                    >
-                      {isUpdatingPayment === reg.id ? (
-                        <div className="animate-spin h-4 w-4 border-t-2 border-b-2 border-[#344736] rounded-full"></div>
-                      ) : (
-                        <CheckCircleIcon className="h-4 w-4" />
-                      )}
-                    </button>
-                  )}
-                </div>
-              </td>
-              <td className="px-6 py-4 text-sm text-[#51514d]">
-                {format(new Date(reg.created_at), 'MMM d, yyyy')}
-              </td>
-              <td className="px-6 py-4 text-right text-sm font-medium">
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => handleViewDetails(reg)}
-                    className="text-[#344736] hover:text-[#415c43] p-1"
-                    title="View Details"
-                  >
-                    <EyeIcon className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => handleShare(reg)}
-                    className="text-[#344736] hover:text-[#415c43] p-1 ml-2"
-                    title="Share Confirmation"
-                  >
-                    <ShareIcon className="h-5 w-5" />
-                  </button>
-                </div>
-              </td>
+
+      {/* Download Button */}
+      <div className="flex justify-between items-center mb-4">
+        <div className="text-sm text-[#51514d]">
+          {totalRegistrations === 0 ? (
+            <span>No registrations found</span>
+          ) : (
+            <span>Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, totalRegistrations)} of {totalRegistrations} registrations</span>
+          )}
+        </div>
+        
+        <Button
+          onClick={downloadRegistrationsCSV}
+          variant="secondary"
+          className="flex items-center gap-2"
+        >
+          <ArrowDownTrayIcon className="h-5 w-5" />
+          Download CSV
+        </Button>
+      </div>
+
+      {/* Registrations Table */}
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registration</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Experience</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {registrations.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">
+                  {searchQuery ? 'No registrations found for your search.' : 'No registrations found.'}
+                </td>
+              </tr>
+            ) : (
+              registrations.map((registration) => (
+                <tr 
+                  key={registration.id} 
+                  className="hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => handleViewDetails(registration)}
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#344736]">
+                    #{registration.id.substring(0, 8)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <div className="font-medium">{registration.user?.full_name || 'Unknown'}</div>
+                    <div className="text-xs text-gray-500">{registration.user?.email || 'No email'}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {registration.experience?.title || 'Unknown Experience'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium">₹{registration.total_amount.toLocaleString()}</div>
+                    <div className="flex items-center">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        registration.payment_status === 'completed' ? 'bg-green-100 text-green-800' : 
+                        registration.payment_status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {registration.payment_status}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {format(new Date(registration.created_at), 'MMM d, yyyy')}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className="text-[#344736] hover:text-[#415c43]"
+                        title="View details"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDetails(registration);
+                        }}
+                      >
+                        <EyeIcon className="h-5 w-5" />
+                      </button>
+
+                      <button
+                        className="text-blue-600 hover:text-blue-800"
+                        title="Share confirmation"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleShare(registration);
+                        }}
+                      >
+                        <ShareIcon className="h-5 w-5" />
+                      </button>
+
+                      {registration.payment_status === 'pending' && (
+                        <button
+                          className="text-green-600 hover:text-green-800"
+                          title="Mark as paid"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkAsCompleted(registration.id);
+                          }}
+                          disabled={isUpdatingPayment === registration.id}
+                        >
+                          {isUpdatingPayment === registration.id ? (
+                            <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <CheckCircleIcon className="h-5 w-5" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="mt-4 flex items-center justify-between">
+        <div className="flex items-center">
+          <span className="text-sm text-gray-700 mr-2">Show:</span>
+          <select 
+            className="border border-gray-300 rounded-md text-sm px-2 py-1"
+            value={pageSize}
+            onChange={handlePageSizeChange}
+          >
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        
+        <div className="flex items-center justify-center space-x-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={currentPage === 1}
+            onClick={() => handlePageChange(currentPage - 1)}
+            className="px-2 py-1"
+          >
+            <ChevronLeftIcon className="h-5 w-5" />
+          </Button>
+          
+          <div className="text-sm text-gray-700">
+            Page {currentPage} of {totalPages}
+          </div>
+          
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={currentPage === totalPages}
+            onClick={() => handlePageChange(currentPage + 1)}
+            className="px-2 py-1"
+          >
+            <ChevronRightIcon className="h-5 w-5" />
+          </Button>
+        </div>
+      </div>
 
       {/* Registration Details Modal */}
       <Modal

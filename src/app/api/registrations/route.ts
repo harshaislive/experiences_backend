@@ -8,33 +8,29 @@ export async function GET(request: NextRequest) {
     console.log('API: Fetching registrations...');
     const { searchParams } = new URL(request.url);
     const searchQuery = searchParams.get('search');
+    const searchType = searchParams.get('searchType') || 'transaction';
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const pageSize = parseInt(searchParams.get('pageSize') || '10', 10);
     
-    console.log('API: Search query:', searchQuery);
+    // Calculate offset for pagination
+    const offset = (page - 1) * pageSize;
+    
+    console.log('API: Query parameters:', { 
+      search: searchQuery, 
+      searchType,
+      page, 
+      pageSize,
+      offset
+    });
     
     const supabase = getServiceClient();
     
-    // First, let's just check if we can get any registrations
-    const { data: basicData, error: basicError } = await supabase
+    // First, build the count query to get total number of registrations
+    let countQuery = supabase
       .from('registrations')
-      .select('*')
-      .limit(1);
-
-    console.log('API: Basic query result:', { 
-      success: !basicError, 
-      dataReceived: !!basicData, 
-      count: basicData?.length || 0,
-      error: basicError ? basicError.message : null 
-    });
-
-    if (basicError) {
-      console.error('API: Error with basic query:', basicError);
-      return NextResponse.json(
-        { error: 'Failed to fetch registrations', details: basicError },
-        { status: 500 }
-      );
-    }
-
-    // Build the query
+      .select('id', { count: 'exact' });
+    
+    // Build the main query
     let query = supabase
       .from('registrations')
       .select(`
@@ -56,11 +52,18 @@ export async function GET(request: NextRequest) {
     // Apply search filter if provided
     if (searchQuery) {
       try {
-        console.log(`API: Applying search filter for: "${searchQuery}"`);
+        console.log(`API: Applying search filter for: "${searchQuery}" (type: ${searchType})`);
         
-        // For transaction_id (which is a text field), we can use ilike directly
-        // This is the correct syntax for Supabase's PostgreSQL REST API
-        query = query.ilike('transaction_id', `%${searchQuery}%`);
+        if (searchType === 'transaction') {
+          // Search by transaction ID
+          query = query.ilike('transaction_id', `%${searchQuery}%`);
+          countQuery = countQuery.ilike('transaction_id', `%${searchQuery}%`);
+        } else if (searchType === 'user') {
+          // Search by user name/email (using foreign key relationship)
+          // This requires a join to the users table
+          query = query.or(`users.full_name.ilike.%${searchQuery}%,users.email.ilike.%${searchQuery}%`);
+          countQuery = countQuery.or(`users.full_name.ilike.%${searchQuery}%,users.email.ilike.%${searchQuery}%`);
+        }
         
         console.log('API: Search filter applied successfully');
       } catch (err) {
@@ -69,10 +72,29 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Execute the query with ordering
-    const { data, error } = await query.order('created_at', { ascending: false });
+    // Execute the count query first
+    const { count, error: countError } = await countQuery;
+    
+    if (countError) {
+      console.error('API: Error with count query:', countError);
+      return NextResponse.json(
+        { error: 'Failed to count registrations', details: countError },
+        { status: 500 }
+      );
+    }
+    
+    // Calculate total pages
+    const total = count || 0;
+    const totalPages = Math.ceil(total / pageSize);
+    
+    console.log('API: Count result:', { total, totalPages });
+    
+    // Execute the main query with pagination
+    const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1);
 
-    console.log('API: Full query result:', { 
+    console.log('API: Main query result:', { 
       success: !error, 
       dataReceived: !!data, 
       count: data?.length || 0,
@@ -80,49 +102,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (error) {
-      console.error('API: Error with full query:', error);
-      
-      // If there was a search query that caused the error, try again without the search filter
-      if (searchQuery) {
-        console.log('API: Retrying query without search filter due to error');
-        const retryQuery = supabase
-          .from('registrations')
-          .select(`
-            *,
-            experiences (
-              id,
-              title,
-              start_date,
-              end_date,
-              slug
-            ),
-            users (
-              full_name,
-              email,
-              phone
-            )
-          `)
-          .order('created_at', { ascending: false });
-          
-        const { data: retryData, error: retryError } = await retryQuery;
-        
-        if (retryError) {
-          return NextResponse.json(
-            { error: 'Failed to fetch registrations', details: error },
-            { status: 500 }
-          );
-        }
-        
-        // Transform the data
-        const transformedData = retryData?.map(item => ({
-          ...item,
-          experience: item.experiences,
-          user: item.users
-        }));
-        
-        return NextResponse.json(transformedData || []);
-      }
-      
+      console.error('API: Error with main query:', error);
       return NextResponse.json(
         { error: 'Failed to fetch registrations', details: error },
         { status: 500 }
@@ -135,8 +115,15 @@ export async function GET(request: NextRequest) {
       experience: item.experiences,
       user: item.users
     }));
-
-    return NextResponse.json(transformedData || []);
+    
+    // Return paginated result
+    return NextResponse.json({
+      data: transformedData || [],
+      total,
+      page,
+      pageSize,
+      totalPages
+    });
   } catch (error) {
     console.error('API: Unexpected error in getRegistrations:', error);
     return NextResponse.json(

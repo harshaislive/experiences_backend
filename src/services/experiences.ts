@@ -1,31 +1,56 @@
-import { supabase, getServiceClient, handleSupabaseError } from '@/lib/supabase';
+import { getServiceClient, handleSupabaseError } from '@/lib/supabase';
 import { Experience, ExperiencePricing, ExperienceItemToBring, ExperienceFoodOption } from '@/types';
 
 export const ExperiencesService = {
-  // Get all experiences (using public client)
+  // Get all experiences (using service client to bypass RLS)
   async getAll() {
-    const { data, error } = await supabase
-      .from('experiences')
-      .select(`
-        *,
-        locations (
-          id,
-          name,
-          location_images (*)
-        ),
-        experience_pricing (*),
-        experience_items_to_bring (*)
-      `)
-      .order('start_date', { ascending: true });
+    console.log('ExperiencesService.getAll called');
+    
+    try {
+      const serviceClient = getServiceClient();
+      const { data, error } = await serviceClient
+        .from('experiences')
+        .select(`
+          *,
+          locations (
+            id,
+            name,
+            location_images (*)
+          ),
+          experience_pricing (*),
+          experience_items_to_bring (*)
+        `)
+        .order('start_date', { ascending: true });
 
-    if (error) handleSupabaseError(error);
-    return data;
+      if (error) {
+        console.error('Error fetching experiences:', error);
+        handleSupabaseError(error);
+      }
+      
+      // For debugging - log status counts
+      if (data) {
+        const statusCounts = {};
+        data.forEach(exp => {
+          statusCounts[exp.status] = (statusCounts[exp.status] || 0) + 1;
+        });
+        console.log(`Experiences fetched count: ${data.length}, Status counts:`, statusCounts);
+      } else {
+        console.log('No experiences found');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Unexpected error in getAll:', error);
+      handleSupabaseError(error as Error);
+      return [];
+    }
   },
 
-  // Get a single experience by ID (using public client)
+  // Get a single experience by ID (using service client)
   async getById(id: string) {
     console.log('Getting experience by ID:', id);
-    const { data, error } = await supabase
+    const serviceClient = getServiceClient();
+    const { data, error } = await serviceClient
       .from('experiences')
       .select(`
         *,
@@ -99,10 +124,11 @@ export const ExperiencesService = {
 
   // Pricing operations
   pricing: {
-    // Get pricing options for an experience (using public client)
+    // Get pricing options for an experience (using service client)
     async getByExperienceId(experienceId: string) {
       try {
-        const { data, error } = await supabase
+        const serviceClient = getServiceClient();
+        const { data, error } = await serviceClient
           .from('experience_pricing')
           .select('*')
           .eq('experience_id', experienceId)
@@ -197,11 +223,12 @@ export const ExperiencesService = {
 
   // Items to bring operations
   itemsToBring: {
-    // Get items for an experience (using public client)
+    // Get items for an experience (using service client)
     async getByExperienceId(experienceId: string) {
       try {
         console.log('Fetching items for experience:', experienceId);
-        const { data, error } = await supabase
+        const serviceClient = getServiceClient();
+        const { data, error } = await serviceClient
           .from('experience_items_to_bring')
           .select('*')
           .eq('experience_id', experienceId)
@@ -285,10 +312,11 @@ export const ExperiencesService = {
   },
 
   food: {
-    // Get food options for an experience (using public client)
+    // Get food options for an experience (using service client)
     async getByExperienceId(experienceId: string) {
       try {
-        const { data, error } = await supabase
+        const serviceClient = getServiceClient();
+        const { data, error } = await serviceClient
           .from('experience_food_options')
           .select('*')
           .eq('experience_id', experienceId)

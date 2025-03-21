@@ -9,7 +9,9 @@ const nextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb'
-    }
+    },
+    // Disable tracing to avoid EPERM permission errors
+    trace: false
   },
   typescript: {
     // !! WARN !!

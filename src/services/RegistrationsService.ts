@@ -34,14 +34,33 @@ export interface BookingDetails {
   accommodation_preference?: string;
 }
 
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 export class RegistrationsService {
-  static async getRegistrations(searchQuery?: string) {
+  static async getRegistrations(
+    searchQuery?: string,
+    page: number = 1,
+    pageSize: number = 10,
+    searchType: 'transaction' | 'user' = 'transaction'
+  ): Promise<PaginatedResult<Registration>> {
     console.log('Starting to fetch registrations via API...');
     try {
-      const url = searchQuery 
-        ? `/api/registrations?search=${encodeURIComponent(searchQuery)}` 
-        : '/api/registrations';
-        
+      // Build the URL with all query parameters
+      const params = new URLSearchParams();
+      if (searchQuery) {
+        params.append('search', searchQuery);
+        params.append('searchType', searchType);
+      }
+      params.append('page', page.toString());
+      params.append('pageSize', pageSize.toString());
+      
+      const url = `/api/registrations?${params.toString()}`;
       console.log(`Fetching registrations from: ${url}`);
       
       const response = await fetch(url, {
@@ -58,11 +77,25 @@ export class RegistrationsService {
       }
 
       const data = await response.json();
-      console.log(`Successfully fetched ${data?.length || 0} registrations via API`);
-      return data || [];
+      console.log(`Successfully fetched registrations via API: ${data?.data?.length || 0} items, total: ${data?.total || 0}`);
+      
+      return {
+        data: data.data || [],
+        total: data.total || 0,
+        page: data.page || page,
+        pageSize: data.pageSize || pageSize,
+        totalPages: data.totalPages || 1
+      };
     } catch (err) {
       console.error('Unexpected error in getRegistrations:', err);
-      throw err; // Re-throw to allow component to handle the error
+      // Return empty result on error
+      return {
+        data: [],
+        total: 0,
+        page: page,
+        pageSize: pageSize,
+        totalPages: 1
+      };
     }
   }
 
